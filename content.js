@@ -29,7 +29,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 class MessageExtractor {
   constructor() {
     this.lastSpeaker = "不明";
-    this.lastIsMyMessage = false;
+    this.lastIsMe = false; // 直前のメッセージが自分だったかどうか
   }
 
   /**
@@ -103,81 +103,61 @@ class MessageExtractor {
     let speaker = null;
     let time = "";
     
-    // 1. 時間と話者の取得 (data-for-copy)
-    // エスケープ文字が含まれている場合があるので置換してからパース
-    let dataStr = item.getAttribute('data-for-copy');
+    // 時間の取得 (data-for-copyを利用)
+    const dataStr = item.getAttribute('data-for-copy');
     if (dataStr) {
         try {
-            dataStr = dataStr.replace(/"/g, '"');
-            const data = JSON.parse(dataStr);
-            if (data.fromUserName) speaker = data.fromUserName;
+            const data = JSON.parse(dataStr.replace(/"/g, '"'));
             if (data.messageTime) {
                 const date = new Date(data.messageTime);
                 time = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
             }
-        } catch (e) {
-            console.warn("Failed to parse data-for-copy", e);
-        }
+        } catch (e) {}
     }
-
-    // 時間のフォールバック (DOM)
     if (!time) {
         const dateEl = item.querySelector('.date');
         if (dateEl) time = dateEl.innerText.trim();
     }
 
-    // 2. 話者特定ロジック
-    // data-for-copy で名前が取れていない場合のみ、DOM/クラス判定を行う
-    // これにより、data-for-copyで正しい名前が取れているのに「自分」と上書きされるのを防ぐ
-    if (!speaker) {
-        // A. 自分のメッセージ判定
-        const isRight = item.classList.contains('msg_rgt') || item.classList.contains('my');
-        
-        let hasIcoMe = false;
-        const icoMe = item.querySelector('.ico_me');
-        if (icoMe && !icoMe.closest('.msg_box')) {
-            hasIcoMe = true;
-        }
-
-        if (isRight || hasIcoMe) {
-            speaker = "自分";
-        }
-        // B. 相手のメッセージ判定
-        else {
-            const dts = item.querySelectorAll('dt');
+    // 話者の特定 (DOMのクラス/表示位置による判定を絶対とする)
+    
+    // 1. 自分か相手か (表示位置で判定)
+    // msg_rgt: 右側（自分）, msg_lft: 左側（相手）
+    const isMe = item.classList.contains('msg_rgt') || item.classList.contains('my');
+    
+    if (isMe) {
+        speaker = "自分";
+    } else {
+        // 2. 相手の場合 (msg_lft)
+        // 名前ヘッダー(dt)を探す
+        const dts = item.querySelectorAll('dt');
+        for (const dt of dts) {
+            // 引用内(.msg_box)のdtは無視
+            if (dt.closest('.msg_box') || dt.closest('.reply_box') || dt.closest('.reply_msg')) continue;
             
-            for (const dt of dts) {
-                // 引用内のdtは無視 (.msg_box, .reply_box, .reply_msg)
-                if (dt.closest('.msg_box') || dt.closest('.reply_box') || dt.closest('.reply_msg')) continue;
-
-                const nameEl = dt.querySelector('.name');
-                if (nameEl) {
-                    speaker = nameEl.innerText.trim();
-                    break;
-                }
+            const nameEl = dt.querySelector('.name');
+            if (nameEl) {
+                speaker = nameEl.innerText.trim();
+                break;
+            }
+        }
+        
+        // 名前が見つからない場合 (連続投稿)
+        if (!speaker) {
+            // 直前が自分だった場合、相手に切り替わった初手で名前がないのは稀だが、
+            // もしそうなったら lastSpeaker("自分") を引き継ぐのは間違いなので "相手" とする
+            if (this.lastIsMe) {
+                speaker = "相手";
+            } else {
+                // 相手の連続投稿なら名前を引き継ぐ
+                speaker = this.lastSpeaker;
             }
         }
     }
-
-    // 3. 最終的な話者決定
-    const isRight = item.classList.contains('msg_rgt') || item.classList.contains('my');
     
-    if (!speaker) {
-        // もし今回が「相手」のメッセージ(msg_lft)で、前回が「自分」だった場合、
-        // 名前が特定できない連続投稿風だが、話者は切り替わっているはずなので
-        // lastSpeaker("自分")を引き継がず、暫定的に"相手"とする
-        if (!isRight && this.lastIsMyMessage) {
-             speaker = "相手";
-        } else {
-             // 連続投稿とみなして直前の話者を使用
-             speaker = this.lastSpeaker;
-        }
-    }
-
-    // 最終的な話者を保存
-    // 今回が「自分」判定(isRight)なら、speaker変数が何であれ（本名であれ）、次回への引き継ぎ用に記録
-    this.lastIsMyMessage = isRight;
-    this.lastSpeaker = speaker || "不明";
+    // 状態更新
+    this.lastIsMe = isMe;
+    this.lastSpeaker = speaker;
 
     // メッセージ本文の取得
     let message = "";
