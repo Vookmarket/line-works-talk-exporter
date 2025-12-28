@@ -193,27 +193,41 @@ class MessageExtractor {
     // メッセージ本文の取得
     let message = "";
     
-    const textEl = item.querySelector('.msg');
+    // 1. item全体をクローンして、引用部分を物理的に削除する
+    // これにより、querySelector('.msg')が引用内の.msgを拾ってしまうのを防ぐ
+    const itemClone = item.cloneNode(true);
+    
+    // 削除すべき引用コンテナ
+    const quoteSelectors = [
+        '.reply_msg', 
+        '.reply_area', 
+        '.quote_area'
+    ];
+    quoteSelectors.forEach(sel => {
+        const els = itemClone.querySelectorAll(sel);
+        els.forEach(el => el.remove());
+    });
+
+    // 2. クリーンになったクローンから本文を探す
+    const textEl = itemClone.querySelector('.msg');
+    
     if (textEl) {
-        const clone = textEl.cloneNode(true);
-        
+        // 本文内にある不要な要素（転送ヘッダーなど）を削除
         const removeSelectors = [
             '.tit_note', 
-            '.reply_area', 
-            '.quote_area', 
             '.src_message', 
             '.reply-source',
             '.forward-header',
-            '.connect',
             '.desc'
+            // '.connect' は削除しない（本文ラッパーの場合があるため）
         ];
         
         removeSelectors.forEach(sel => {
-            const els = clone.querySelectorAll(sel);
+            const els = textEl.querySelectorAll(sel);
             els.forEach(el => el.remove());
         });
 
-        message = clone.innerText.trim();
+        message = textEl.innerText.trim();
     }
     else if (item.querySelector('.sticker_box')) {
         message = "(スタンプ)";
