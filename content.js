@@ -152,7 +152,27 @@ class MessageExtractor {
     // テキストメッセージ
     const textEl = item.querySelector('.msg');
     if (textEl) {
-        message = textEl.innerText.trim();
+        // リプライ元や転送ヘッダーを除外するためにクローンを作成
+        const clone = textEl.cloneNode(true);
+        
+        // 削除対象のセレクタ（リプライ元や転送情報）
+        // .tit_note: 転送メッセージのヘッダー
+        // .reply-area, .quote-area: 一般的なリプライ元のクラス（推測含む）
+        const removeSelectors = [
+            '.tit_note', 
+            '.reply_area', 
+            '.quote_area', 
+            '.src_message', 
+            '.reply-source',
+            '.forward-header'
+        ];
+        
+        removeSelectors.forEach(sel => {
+            const els = clone.querySelectorAll(sel);
+            els.forEach(el => el.remove());
+        });
+
+        message = clone.innerText.trim();
     }
     // スタンプ
     else if (item.querySelector('.sticker_box')) {
