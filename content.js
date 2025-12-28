@@ -46,39 +46,63 @@ class MessageExtractor {
 
   /**
    * メッセージリストのコンテナ要素を探す
+   * 左側のトークルーム一覧ではなく、右側のメッセージエリアを取得する
    */
   findMessageContainer() {
-    const candidates = [
+    // まず、左側のトークルーム一覧を除外するために、メインのメッセージエリアを特定
+    // メッセージエリアの候補（トークルーム一覧は除外）
+    const messageAreaCandidates = [
       '#messageList',
-      '.chat_list',
-      '.talk_list',
-      'ul[class*="chat"]',
-      'ul[class*="talk"]',
-      'div[role="list"]',
-      'section[class*="chat"]',
-      '.message-area'
+      '.message-area',
+      '.chat-content',
+      '.talk-content',
+      'main[class*="chat"]',
+      'main[class*="talk"]',
+      'section[class*="message"]',
+      'div[class*="message-area"]',
+      'div[class*="chat-body"]',
+      'article',
+      '[role="main"]'
     ];
 
-    let bestContainer = null;
-    let maxItems = 0;
+    // メッセージエリアを見つける
+    let messageArea = null;
+    for (const sel of messageAreaCandidates) {
+      const el = document.querySelector(sel);
+      if (el) {
+        // トークルーム一覧を含まないことを確認
+        // （一覧は通常、左側に固定されている）
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 300) { // 一覧より広い要素を優先
+          messageArea = el;
+          break;
+        }
+      }
+    }
 
-    for (const sel of candidates) {
-      const els = document.querySelectorAll(sel);
-      els.forEach(el => {
-        const itemCount = el.querySelectorAll('li, div[role="listitem"], .msg_item').length;
-        if (itemCount > maxItems) {
-          maxItems = itemCount;
-          bestContainer = el;
+    if (!messageArea) {
+      // フォールバック: より広範な探索
+      // 画面中央付近（x > 300px）にある要素を探す
+      const allContainers = document.querySelectorAll('div, section, main, article');
+      let bestContainer = null;
+      let maxItems = 0;
+
+      allContainers.forEach(container => {
+        const rect = container.getBoundingClientRect();
+        // 左端のトークルーム一覧を除外（x座標が300px以上）
+        if (rect.x > 250 && rect.width > 300) {
+          const itemCount = container.querySelectorAll('li, div[class*="message"], div[class*="msg"]').length;
+          if (itemCount > maxItems) {
+            maxItems = itemCount;
+            bestContainer = container;
+          }
         }
       });
+
+      messageArea = bestContainer;
     }
 
-    // コンテナが見つからない場合、body直下から探索するフォールバック
-    if (!bestContainer && maxItems === 0) {
-      return document.body; // 暫定的
-    }
-
-    return bestContainer;
+    return messageArea;
   }
 
   /**
