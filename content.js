@@ -38,194 +38,145 @@ class MessageExtractor {
     const container = this.findMessageContainer();
     if (!container) return [];
 
-    const items = this.findMessageItems(container);
+    console.log("Message container found:", container);
+
+    // .chat_view の直下の要素を取得（日付区切りやシステムメッセージも含む）
+    // 提供されたHTML構造: .chat_view > div.inform_date, div.msg_wrap ...
+    const items = container.children;
     if (!items || items.length === 0) return [];
 
-    return items.map(item => this.parseItem(item)).filter(msg => msg !== null);
+    const results = [];
+    Array.from(items).forEach(item => {
+        // 非表示要素はスキップ
+        if (item.style.display === 'none') return;
+        
+        const parsed = this.parseItem(item);
+        if (parsed) {
+            results.push(parsed);
+        }
+    });
+
+    return results;
   }
 
   /**
    * メッセージリストのコンテナ要素を探す
    */
   findMessageContainer() {
-    // 優先度の高いセレクタ（右側のチャットエリアと思われるもの）
-    const prioritySelectors = [
-      '#messageList', 
-      '#talk_view_area',
-      'ul[class*="chat"]',
-      'div[class*="message_list"]',
-      'ul[class*="message_list"]',
-      '.chat-list',
-      '[role="main"]'
-    ];
-
-    // まずはIDやクラスで探す
-    for (const sel of prioritySelectors) {
-      const els = document.querySelectorAll(sel);
-      for (const el of els) {
-        // 非表示のものは除外
-        if (el.offsetParent === null) continue;
-        
-        // 幅チェック: トークルーム一覧（左サイドバー）は通常幅が狭い
-        // メインエリアはそれより広いはず
-        const rect = el.getBoundingClientRect();
-        const windowWidth = window.innerWidth;
-        
-        // ウィンドウの40%以上の幅がある、または400px以上の幅がある要素を対象とする
-        // (サイドバーは通常300px程度)
-        if (rect.width > 400 || rect.width > (windowWidth * 0.4)) {
-           // 要素内にリストアイテムやメッセージっぽいものがあるか確認
-           if (el.querySelectorAll('li, div[class*="msg"], div[class*="row"]').length > 0) {
-             console.log("Found container by selector:", sel, el);
-             return el;
-           }
-        }
-      }
-    }
-
-    // セレクタで見つからない場合、ページ内の「メッセージアイテムを多く含む最大のコンテナ」を探す
-    // ただし、幅が狭いコンテナ（サイドバー）は除外する
+    // 提供されたHTMLに基づき、右側のチャットエリア(.chat_view)を特定
+    const container = document.querySelector('.chat_view');
+    if (container) return container;
     
-    console.log("Fallback: Searching all containers...");
-    const candidates = document.querySelectorAll('ul, ol, div[role="list"], section, main, article, div[class*="list"]');
-    let bestContainer = null;
-    let maxItems = 0;
-
-    candidates.forEach(el => {
-        // 非表示チェック
-        if (el.offsetParent === null) return;
-        
-        // 幅チェック
-        const rect = el.getBoundingClientRect();
-        const windowWidth = window.innerWidth;
-        
-        // サイドバー除外のための幅チェック
-        // ウィンドウ幅の40%以上、または400px以上
-        const isWideEnough = rect.width > 400 || rect.width > (windowWidth * 0.4);
-        
-        if (!isWideEnough) return;
-
-        // アイテム数をカウント
-        const items = el.querySelectorAll('li, div[class*="msg-item"], div[class*="message-item"], div[class*="chat-item"]');
-        if (items.length > maxItems) {
-            maxItems = items.length;
-            bestContainer = el;
-        }
-    });
-
-    if (bestContainer) {
-        console.log("Found container by fallback:", bestContainer);
-        return bestContainer;
-    }
-
-    // どうしても見つからない場合、bodyを返す（以前の挙動に近いが、フィルター付き）
-    // ただし、これだとサイドバーも拾ってしまう可能性があるので、最後の手段
-    console.warn("No specific container found, returning body.");
-    return document.body;
-  }
-
-  /**
-   * コンテナ内の個々のメッセージ要素を取得する
-   */
-  findMessageItems(container) {
-    // コンテナがbodyの場合、全探索になるので注意が必要
-    // その場合でも、幅が狭い親要素を持つアイテムは除外する
-    
-    let items = container.querySelectorAll('li, div[role="listitem"], .msg_item, .message-item, div[class*="row"]');
-    
-    // itemsが空の場合、より広範な検索を行う
-    if (items.length === 0) {
-        items = container.querySelectorAll('div[class*="msg"], div[class*="chat-item"]');
+    // フォールバック: スクロールエリア
+    const scrollArea = document.querySelector('#chat_room_scroll');
+    if (scrollArea) {
+        // スクロールエリア内の最初のdivをコンテナとみなすことが多い
+        return scrollArea.firstElementChild || scrollArea;
     }
     
-    return Array.from(items).filter(item => {
-        // 非表示要素やシステムメッセージを除外
-        if (item.style.display === 'none') return false;
-        
-        // アイテム自体の幅チェック（念のため）
-        // 親がbodyの場合、サイドバーのアイテムも含まれる可能性があるため
-        if (container === document.body) {
-            const rect = item.getBoundingClientRect();
-            // 左端にあり、かつ幅が狭いものは除外（サイドバーの可能性大）
-            if (rect.left < 100 && rect.width < 350) {
-                return false;
-            }
-        }
-
-        const className = (item.className || "").toString();
-        if (className.includes('system') || className.includes('date-line') || className.includes('notice')) {
-            return false;
-        }
-        return true;
-    });
+    // それでも見つからない場合
+    return document.querySelector('#messageList') || document.body;
   }
 
   /**
    * 個々のメッセージ要素を解析してデータを抽出する
    */
   parseItem(item) {
-    // スピーカーの特定
-    let speaker = this.identifySpeaker(item);
-    
-    // 時間の特定
-    const time = this.identifyTime(item);
+    const classList = item.classList;
 
-    // メッセージ本文の特定
-    const message = this.identifyMessageBody(item);
-
-    if (!message) return null;
-
-    return { speaker, message, time };
-  }
-
-  identifySpeaker(item) {
-    // 自分のメッセージ判定
-    const isMe = item.classList.contains('my') || 
-                 item.classList.contains('me') || 
-                 item.classList.contains('right') ||
-                 item.classList.contains('sent') ||
-                 item.querySelector('.my') !== null;
-
-    if (isMe) {
-      return "自分";
+    // 1. 日付区切り線 (例: 2023. 8. 11. (金))
+    if (classList.contains('inform_date')) {
+        const dateEl = item.querySelector('.date');
+        if (dateEl) {
+            return { type: 'date', content: dateEl.innerText.trim() };
+        }
     }
 
-    // 名前要素の探索
-    const nameSelectors = ['.name', '.sender', 'dt', 'strong', '.profile_name', '[class*="name"]', 'h3', 'h4'];
-    for (const sel of nameSelectors) {
-      const el = item.querySelector(sel);
-      if (el && el.innerText.trim()) {
-        const name = el.innerText.trim();
-        this.lastSpeaker = name;
-        return name;
-      }
+    // 2. システムメッセージ (例: このトークルームは自分にのみ...)
+    if (classList.contains('inform_msg')) {
+        return { type: 'system', content: item.innerText.trim() };
     }
 
-    // 名前がない場合、直前の話者（連続投稿）
-    return this.lastSpeaker;
-  }
-
-  identifyTime(item) {
-    const timeSelectors = ['.time', '.date', '.timestamp', 'span[class*="time"]', 'small', 'div[class*="time"]'];
-    for (const sel of timeSelectors) {
-      const el = item.querySelector(sel);
-      if (el) return el.innerText.trim();
-    }
-    return "";
-  }
-
-  identifyMessageBody(item) {
-    const bodySelectors = [
-      '.text', '.msg', '.message', '.content', '.speech', '.bubble', 
-      'pre', '.msg_text', '[class*="text"]', 'p', 'div[class*="body"]'
-    ];
-
-    for (const sel of bodySelectors) {
-      const el = item.querySelector(sel);
-      if (el) return el.innerText.trim();
+    // 3. 通常のメッセージ (msg_wrap)
+    if (classList.contains('msg_wrap') || classList.contains('msg_rgt') || classList.contains('msg_lft')) {
+        return this.parseUserMessage(item);
     }
 
     return null;
+  }
+
+  /**
+   * ユーザーメッセージの解析
+   */
+  parseUserMessage(item) {
+    let speaker = "不明";
+    let time = "";
+    
+    // data-for-copy属性からメタデータを取得（最も確実）
+    // 例: data-for-copy='{"fromUserName":"金月弘樹","messageTime":1700659279874,...}'
+    const dataStr = item.getAttribute('data-for-copy');
+    if (dataStr) {
+        try {
+            const data = JSON.parse(dataStr);
+            speaker = data.fromUserName || "自分";
+            if (data.messageTime) {
+                const date = new Date(data.messageTime);
+                time = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+            }
+        } catch (e) {
+            console.warn("Failed to parse data-for-copy", e);
+        }
+    } else {
+        // フォールバック: DOMから探す
+        const nameEl = item.querySelector('.name');
+        if (nameEl) speaker = nameEl.innerText.trim();
+        
+        const dateEl = item.querySelector('.date'); // 時間表示
+        if (dateEl) time = dateEl.innerText.trim();
+    }
+
+    // もしスピーカーが不明で、クラスに 'my' や 'ico_me' があれば自分
+    if (speaker === "不明") {
+        if (item.classList.contains('my') || item.querySelector('.ico_me')) {
+            speaker = "自分";
+        } else {
+             // 連続投稿の場合、直前の話者を使う
+             speaker = this.lastSpeaker;
+        }
+    }
+    this.lastSpeaker = speaker;
+
+    // メッセージ本文の取得
+    let message = "";
+    
+    // テキストメッセージ
+    const textEl = item.querySelector('.msg');
+    if (textEl) {
+        message = textEl.innerText.trim();
+    }
+    // スタンプ
+    else if (item.querySelector('.sticker_box')) {
+        message = "(スタンプ)";
+    }
+    // ファイル添付
+    else if (item.querySelector('.file_name')) {
+        const fileName = item.querySelector('.file_name').innerText.trim();
+        message = `(ファイル: ${fileName})`;
+    }
+    // 画像添付
+    else if (item.querySelector('.thmb') || item.querySelector('img')) {
+        message = "(画像/メディア)";
+    }
+
+    if (!message && !item.innerText.trim()) return null;
+    
+    // メッセージが空でも、添付ファイルなどがあるかもしれないので、
+    // 上記のチェックで見つからなければ、全体のテキストを返す（最後の手段）
+    if (!message) {
+        message = item.innerText.replace(speaker, '').replace(time, '').trim();
+    }
+
+    return { type: 'message', speaker, message, time };
   }
 }
 
@@ -237,9 +188,15 @@ function formatMessages(messages) {
                  `==================================================\n\n`;
 
   const body = messages.map(m => {
-    // 時間がある場合は表示に追加
-    const timeStr = m.time ? ` (${m.time})` : "";
+    if (m.type === 'date') {
+        return `\n---------------- ${m.content} ----------------`;
+    }
+    if (m.type === 'system') {
+        return `[システム] ${m.content}`;
+    }
     
+    // 通常メッセージ
+    const timeStr = m.time ? ` (${m.time})` : "";
     return `${m.speaker}${timeStr}:\n「${m.message}」`;
   }).join('\n\n');
 
