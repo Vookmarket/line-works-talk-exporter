@@ -41,14 +41,11 @@ class MessageExtractor {
 
     console.log("Message container found:", container);
 
-    // .chat_view の直下の要素を取得（日付区切りやシステムメッセージも含む）
-    // 提供されたHTML構造: .chat_view > div.inform_date, div.msg_wrap ...
     const items = container.children;
     if (!items || items.length === 0) return [];
 
     const results = [];
     Array.from(items).forEach(item => {
-        // 非表示要素はスキップ
         if (item.style.display === 'none') return;
         
         const parsed = this.parseItem(item);
@@ -64,18 +61,14 @@ class MessageExtractor {
    * メッセージリストのコンテナ要素を探す
    */
   findMessageContainer() {
-    // 提供されたHTMLに基づき、右側のチャットエリア(.chat_view)を特定
     const container = document.querySelector('.chat_view');
     if (container) return container;
     
-    // フォールバック: スクロールエリア
     const scrollArea = document.querySelector('#chat_room_scroll');
     if (scrollArea) {
-        // スクロールエリア内の最初のdivをコンテナとみなすことが多い
         return scrollArea.firstElementChild || scrollArea;
     }
     
-    // それでも見つからない場合
     return document.querySelector('#messageList') || document.body;
   }
 
@@ -85,7 +78,6 @@ class MessageExtractor {
   parseItem(item) {
     const classList = item.classList;
 
-    // 1. 日付区切り線 (例: 2023. 8. 11. (金))
     if (classList.contains('inform_date')) {
         const dateEl = item.querySelector('.date');
         if (dateEl) {
@@ -93,12 +85,10 @@ class MessageExtractor {
         }
     }
 
-    // 2. システムメッセージ (例: このトークルームは自分にのみ...)
     if (classList.contains('inform_msg')) {
         return { type: 'system', content: item.innerText.trim() };
     }
 
-    // 3. 通常のメッセージ (msg_wrap)
     if (classList.contains('msg_wrap') || classList.contains('msg_rgt') || classList.contains('msg_lft')) {
         return this.parseUserMessage(item);
     }
@@ -136,35 +126,26 @@ class MessageExtractor {
         if (dateEl) time = dateEl.innerText.trim();
     }
 
-    // 2. 話者特定ロジックの再構築
-    // DOM構造とクラス名に基づいて厳密に判定する
+    // 2. 話者特定ロジック
+    // data-for-copy で名前が取れていない場合のみ、DOM/クラス判定を行う
+    // これにより、data-for-copyで正しい名前が取れているのに「自分」と上書きされるのを防ぐ
+    if (!speaker) {
+        // A. 自分のメッセージ判定
+        const isRight = item.classList.contains('msg_rgt') || item.classList.contains('my');
+        
+        let hasIcoMe = false;
+        const icoMe = item.querySelector('.ico_me');
+        if (icoMe && !icoMe.closest('.msg_box')) {
+            hasIcoMe = true;
+        }
 
-    // A. 自分のメッセージ判定 (最優先)
-    // msg_rgt クラス、my クラス、または .ico_me がヘッダーにある場合
-    const isRight = item.classList.contains('msg_rgt') || item.classList.contains('my');
-    
-    // .ico_me がある場合、それが引用内(.msg_box)でないことを確認
-    let hasIcoMe = false;
-    const icoMe = item.querySelector('.ico_me');
-    if (icoMe && !icoMe.closest('.msg_box')) {
-        hasIcoMe = true;
-    }
-
-    if (isRight || hasIcoMe) {
-        speaker = "自分";
-    }
-    // B. 相手のメッセージ判定
-    else {
-        // data-for-copyで名前が取れている場合はDOM探索をスキップする（これが最も安全）
-        // 名前が取れていない場合のみ、DOMから探す
-        if (!speaker) {
-            // 相手のメッセージの場合、名前ヘッダー(dt)があるか、連続投稿(ヘッダーなし)かのどちらか
-            
-            // ヘッダー内の名前を探す
-            // 重要: 引用内(.msg_box)のdtを拾わないよう除外する
+        if (isRight || hasIcoMe) {
+            speaker = "自分";
+        }
+        // B. 相手のメッセージ判定
+        else {
             const dts = item.querySelectorAll('dt');
-            let foundName = false;
-
+            
             for (const dt of dts) {
                 // 引用内のdtは無視 (.msg_box, .reply_box, .reply_msg)
                 if (dt.closest('.msg_box') || dt.closest('.reply_box') || dt.closest('.reply_msg')) continue;
@@ -172,43 +153,39 @@ class MessageExtractor {
                 const nameEl = dt.querySelector('.name');
                 if (nameEl) {
                     speaker = nameEl.innerText.trim();
-                    foundName = true;
                     break;
                 }
             }
         }
+    }
 
-        // 最終的に名前が特定できていない場合
-        if (!speaker) {
-            // もし今回が「相手」のメッセージ(msg_lft)で、前回が「自分」だった場合、
-            // 話者は切り替わっているはずなので、lastSpeaker("自分")を引き継いではいけない。
-            if (!isRight && this.lastIsMyMessage) {
-                 speaker = "相手";
-            } else {
-                 // 連続投稿とみなして直前の話者を使用
-                 speaker = this.lastSpeaker;
-            }
+    // 3. 最終的な話者決定
+    const isRight = item.classList.contains('msg_rgt') || item.classList.contains('my');
+    
+    if (!speaker) {
+        // もし今回が「相手」のメッセージ(msg_lft)で、前回が「自分」だった場合、
+        // 名前が特定できない連続投稿風だが、話者は切り替わっているはずなので
+        // lastSpeaker("自分")を引き継がず、暫定的に"相手"とする
+        if (!isRight && this.lastIsMyMessage) {
+             speaker = "相手";
+        } else {
+             // 連続投稿とみなして直前の話者を使用
+             speaker = this.lastSpeaker;
         }
     }
 
     // 最終的な話者を保存
-    this.lastIsMyMessage = (isRight || hasIcoMe);
+    // 今回が「自分」判定(isRight)なら、speaker変数が何であれ（本名であれ）、次回への引き継ぎ用に記録
+    this.lastIsMyMessage = isRight;
     this.lastSpeaker = speaker || "不明";
 
     // メッセージ本文の取得
     let message = "";
     
-    // テキストメッセージ
     const textEl = item.querySelector('.msg');
     if (textEl) {
-        // リプライ元や転送ヘッダーを除外するためにクローンを作成
         const clone = textEl.cloneNode(true);
         
-        // 削除対象のセレクタ（リプライ元や転送情報）
-        // .tit_note: 転送メッセージのヘッダー
-        // .reply-area, .quote-area: 一般的なリプライ元のクラス（推測含む）
-        // .connect: リプライ元の引用やリンクカード
-        // .desc: 「トークの詳細」などのリンクテキスト
         const removeSelectors = [
             '.tit_note', 
             '.reply_area', 
@@ -227,24 +204,19 @@ class MessageExtractor {
 
         message = clone.innerText.trim();
     }
-    // スタンプ
     else if (item.querySelector('.sticker_box')) {
         message = "(スタンプ)";
     }
-    // ファイル添付
     else if (item.querySelector('.file_name')) {
         const fileName = item.querySelector('.file_name').innerText.trim();
         message = `(ファイル: ${fileName})`;
     }
-    // 画像添付
     else if (item.querySelector('.thmb') || item.querySelector('img')) {
         message = "(画像/メディア)";
     }
 
     if (!message && !item.innerText.trim()) return null;
     
-    // メッセージが空でも、添付ファイルなどがあるかもしれないので、
-    // 上記のチェックで見つからなければ、全体のテキストを返す（最後の手段）
     if (!message) {
         message = item.innerText.replace(speaker, '').replace(time, '').trim();
     }
@@ -268,7 +240,6 @@ function formatMessages(messages) {
         return `[システム] ${m.content}`;
     }
     
-    // 通常メッセージ
     const timeStr = m.time ? ` (${m.time})` : "";
     return `${m.speaker}${timeStr}:\n「${m.message}」`;
   }).join('\n\n');
