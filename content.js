@@ -145,7 +145,17 @@ class MessageExtractor {
     // 話者の特定 (DOMのクラス/表示位置による判定を絶対とする)
     
     // 1. 自分か相手か (表示位置で判定)
-    const isMe = item.classList.contains('msg_rgt') || item.classList.contains('my');
+    let isMe = item.classList.contains('msg_rgt') || item.classList.contains('my');
+    
+    // クラス判定で「自分」でない場合でも、座標的に右側にあれば「自分」とみなす（クラス漏れ対策）
+    if (!isMe) {
+        const contentEl = item.querySelector('.msg_box') || item;
+        const rect = contentEl.getBoundingClientRect();
+        // 左端からウィンドウ幅の30%以上離れていれば右寄せ（自分）と判定
+        if (rect.left > (window.innerWidth * 0.3)) {
+            isMe = true;
+        }
+    }
     
     if (isMe) {
         speaker = "自分";
