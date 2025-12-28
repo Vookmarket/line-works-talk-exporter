@@ -153,27 +153,31 @@ class MessageExtractor {
     }
     // B. 相手のメッセージ判定
     else {
-        // 相手のメッセージの場合、名前ヘッダー(dt)があるか、連続投稿(ヘッダーなし)かのどちらか
-        
-        // ヘッダー内の名前を探す
-        // 重要: 引用内(.msg_box)のdtを拾わないよう除外する
-        const dts = item.querySelectorAll('dt');
-        let foundName = false;
+        // data-for-copyで名前が取れている場合はDOM探索をスキップする（これが最も安全）
+        // 名前が取れていない場合のみ、DOMから探す
+        if (!speaker) {
+            // 相手のメッセージの場合、名前ヘッダー(dt)があるか、連続投稿(ヘッダーなし)かのどちらか
+            
+            // ヘッダー内の名前を探す
+            // 重要: 引用内(.msg_box)のdtを拾わないよう除外する
+            const dts = item.querySelectorAll('dt');
+            let foundName = false;
 
-        for (const dt of dts) {
-            if (dt.closest('.msg_box')) continue; // 引用内のdtは無視
+            for (const dt of dts) {
+                // 引用内のdtは無視 (.msg_box, .reply_box, .reply_msg)
+                if (dt.closest('.msg_box') || dt.closest('.reply_box') || dt.closest('.reply_msg')) continue;
 
-            const nameEl = dt.querySelector('.name');
-            if (nameEl) {
-                speaker = nameEl.innerText.trim();
-                foundName = true;
-                break;
+                const nameEl = dt.querySelector('.name');
+                if (nameEl) {
+                    speaker = nameEl.innerText.trim();
+                    foundName = true;
+                    break;
+                }
             }
         }
 
-        // ヘッダーが見つからず、かつ speaker も未設定（data-for-copy失敗など）の場合
-        // -> 連続投稿とみなして直前の話者を使用
-        if (!foundName && !speaker) {
+        // 最終的に名前が特定できていない場合 -> 連続投稿とみなして直前の話者を使用
+        if (!speaker) {
             speaker = this.lastSpeaker;
         }
     }
