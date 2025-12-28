@@ -158,13 +158,17 @@ class MessageExtractor {
         // 削除対象のセレクタ（リプライ元や転送情報）
         // .tit_note: 転送メッセージのヘッダー
         // .reply-area, .quote-area: 一般的なリプライ元のクラス（推測含む）
+        // .connect: リプライ元の引用やリンクカード
+        // .desc: 「トークの詳細」などのリンクテキスト
         const removeSelectors = [
             '.tit_note', 
             '.reply_area', 
             '.quote_area', 
             '.src_message', 
             '.reply-source',
-            '.forward-header'
+            '.forward-header',
+            '.connect',
+            '.desc'
         ];
         
         removeSelectors.forEach(sel => {
