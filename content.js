@@ -29,6 +29,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 class MessageExtractor {
   constructor() {
     this.lastSpeaker = "不明";
+    this.lastIsMyMessage = false;
   }
 
   /**
@@ -113,10 +114,11 @@ class MessageExtractor {
     let time = "";
     
     // 1. 時間と話者の取得 (data-for-copy)
-    // data-for-copyは最も信頼できるが、話者についてはクラス判定（自分/相手）を優先する場合がある
-    const dataStr = item.getAttribute('data-for-copy');
+    // エスケープ文字が含まれている場合があるので置換してからパース
+    let dataStr = item.getAttribute('data-for-copy');
     if (dataStr) {
         try {
+            dataStr = dataStr.replace(/"/g, '"');
             const data = JSON.parse(dataStr);
             if (data.fromUserName) speaker = data.fromUserName;
             if (data.messageTime) {
@@ -176,15 +178,21 @@ class MessageExtractor {
             }
         }
 
-        // 最終的に名前が特定できていない場合 -> 連続投稿とみなして直前の話者を使用
+        // 最終的に名前が特定できていない場合
         if (!speaker) {
-            speaker = this.lastSpeaker;
+            // もし今回が「相手」のメッセージ(msg_lft)で、前回が「自分」だった場合、
+            // 話者は切り替わっているはずなので、lastSpeaker("自分")を引き継いではいけない。
+            if (!isRight && this.lastIsMyMessage) {
+                 speaker = "相手";
+            } else {
+                 // 連続投稿とみなして直前の話者を使用
+                 speaker = this.lastSpeaker;
+            }
         }
     }
 
-    // 最終的な話者を保存（次の連続投稿のために）
-    // ただし、もし今回の判定が「自分」で、data-for-copyの名前が「本名」だった場合、
-    // ここで保存するのは「自分」にしておくことで一貫性を保つ
+    // 最終的な話者を保存
+    this.lastIsMyMessage = (isRight || hasIcoMe);
     this.lastSpeaker = speaker || "不明";
 
     // メッセージ本文の取得
