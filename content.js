@@ -126,11 +126,13 @@ class MessageExtractor {
     let speaker = null;
     let time = "";
     
-    // 時間の取得 (data-for-copy利用)
+    // 時間と話者の取得 (data-for-copy利用)
+    // グループトーク対応のため、data-for-copyの名前を最優先する
     const dataStr = item.getAttribute('data-for-copy');
     if (dataStr) {
         try {
             const data = JSON.parse(dataStr.replace(/"/g, '"'));
+            if (data.fromUserName) speaker = data.fromUserName;
             if (data.messageTime) {
                 const date = new Date(data.messageTime);
                 time = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
@@ -142,46 +144,41 @@ class MessageExtractor {
         if (dateEl) time = dateEl.innerText.trim();
     }
 
-    // 話者の特定 (DOMのクラス/表示位置による判定を絶対とする)
-    
     // 1. 自分か相手か (クラスおよび内部要素で判定)
-    // msg_rgt: 右側（自分）, msg_lft: 左側（相手）
     let isMe = item.classList.contains('msg_rgt') || item.classList.contains('my');
-    
-    // クラス判定で「自分」でない場合でも、内部要素で「自分」と特定できる場合がある
     if (!isMe) {
-        // 「既読」マーク (.read) があれば自分
         if (item.querySelector('.read')) {
             isMe = true;
         }
     }
     
-    if (isMe) {
-        speaker = "自分";
-    } else {
-        // 2. 相手の場合 (msg_lft)
-        // 名前ヘッダー(dt)を探す
-        const dts = item.querySelectorAll('dt');
-        for (const dt of dts) {
-            // 引用内(.msg_box)のdtは無視
-            if (dt.closest('.msg_box') || dt.closest('.reply_box') || dt.closest('.reply_msg')) continue;
-            
-            const nameEl = dt.querySelector('.name');
-            if (nameEl) {
-                speaker = nameEl.innerText.trim();
+    // 2. 話者が未特定の場合のフォールバック (DOM探索)
+    if (!speaker) {
+        if (isMe) {
+            speaker = "自分";
+        } else {
+            // 相手の場合 (msg_lft)
+            // 名前ヘッダー(.name)を探す
+            // dtタグに限定せず、.msg_box外の.nameを探す (em.nameなどのパターンに対応)
+            const nameEls = item.querySelectorAll('.name');
+            for (const el of nameEls) {
+                // 引用内(.msg_box)の要素は無視
+                if (el.closest('.msg_box') || el.closest('.reply_box') || el.closest('.reply_msg')) continue;
+                
+                speaker = el.innerText.trim();
                 break;
             }
-        }
-        
-        // 名前が見つからない場合
-        if (!speaker) {
-            // 直前が自分だった場合、あるいは初回でlastSpeakerが不明の場合
-            // -> 個人チャットの可能性が高いので「トークルーム名（相手の名前）」を使用
-            if (this.lastIsMe || this.lastSpeaker === "不明") {
-                speaker = this.roomTitle;
-            } else {
-                // 相手の連続投稿なら名前を引き継ぐ
-                speaker = this.lastSpeaker;
+            
+            // 名前が見つからない場合
+            if (!speaker) {
+                // 直前が自分だった場合、あるいは初回でlastSpeakerが不明の場合
+                // -> 個人チャットの可能性が高いので「トークルーム名（相手の名前）」を使用
+                if (this.lastIsMe || this.lastSpeaker === "不明") {
+                    speaker = this.roomTitle;
+                } else {
+                    // 相手の連続投稿なら名前を引き継ぐ
+                    speaker = this.lastSpeaker;
+                }
             }
         }
     }
@@ -194,7 +191,6 @@ class MessageExtractor {
     let message = "";
     
     // 1. item全体をクローンして、引用部分を物理的に削除する
-    // これにより、querySelector('.msg')が引用内の.msgを拾ってしまうのを防ぐ
     const itemClone = item.cloneNode(true);
     
     // 削除すべき引用コンテナ
@@ -219,7 +215,7 @@ class MessageExtractor {
             '.reply-source',
             '.forward-header',
             '.desc'
-            // '.connect' は削除しない（本文ラッパーの場合があるため）
+            // '.connect' は削除しない
         ];
         
         removeSelectors.forEach(sel => {
