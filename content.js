@@ -109,16 +109,16 @@ class MessageExtractor {
    * ユーザーメッセージの解析
    */
   parseUserMessage(item) {
-    let speaker = "不明";
+    let speaker = null;
     let time = "";
     
-    // data-for-copy属性からメタデータを取得（最も確実）
-    // 例: data-for-copy='{"fromUserName":"金月弘樹","messageTime":1700659279874,...}'
+    // 1. 時間と話者の取得 (data-for-copy)
+    // data-for-copyは最も信頼できるが、話者についてはクラス判定（自分/相手）を優先する場合がある
     const dataStr = item.getAttribute('data-for-copy');
     if (dataStr) {
         try {
             const data = JSON.parse(dataStr);
-            speaker = data.fromUserName || "自分";
+            if (data.fromUserName) speaker = data.fromUserName;
             if (data.messageTime) {
                 const date = new Date(data.messageTime);
                 time = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
@@ -126,55 +126,62 @@ class MessageExtractor {
         } catch (e) {
             console.warn("Failed to parse data-for-copy", e);
         }
-    } else {
-        // フォールバック: DOMから探す
-        // リプライ等の引用内にある名前を拾わないよう、慎重に探索する
-        const nameEls = item.querySelectorAll('.name');
-        for (const el of nameEls) {
-            // .msg_box (メッセージ本文エリア) の中にある名前は引用の可能性が高いため無視
-            // 本来の名前ヘッダーは .msg_box の外（.chat_cont > dt）にある
-            if (el.closest('.msg_box')) continue;
-            
-            // 引用エリアの中にある名前も無視（念のため）
-            if (el.closest('.reply_area') || 
-                el.closest('.quote_area') || 
-                el.closest('.connect') ||
-                el.closest('.forward_msg')) continue;
+    }
 
-            // 有効な名前とみなす
-            speaker = el.innerText.trim();
-            break;
-        }
-        
-        const dateEl = item.querySelector('.date'); // 時間表示
+    // 時間のフォールバック (DOM)
+    if (!time) {
+        const dateEl = item.querySelector('.date');
         if (dateEl) time = dateEl.innerText.trim();
     }
 
-    // もしスピーカーが不明で、クラスに 'my' や 'ico_me' があれば自分
-    if (speaker === "不明") {
-        // .ico_me も引用内にある可能性を排除するため、dt内のみ探すか、厳密にチェック
-        const hasIcoMe = item.querySelector('dt .ico_me') !== null || item.querySelector('.ico_me') !== null;
+    // 2. 話者特定ロジックの再構築
+    // DOM構造とクラス名に基づいて厳密に判定する
+
+    // A. 自分のメッセージ判定 (最優先)
+    // msg_rgt クラス、my クラス、または .ico_me がヘッダーにある場合
+    const isRight = item.classList.contains('msg_rgt') || item.classList.contains('my');
+    
+    // .ico_me がある場合、それが引用内(.msg_box)でないことを確認
+    let hasIcoMe = false;
+    const icoMe = item.querySelector('.ico_me');
+    if (icoMe && !icoMe.closest('.msg_box')) {
+        hasIcoMe = true;
+    }
+
+    if (isRight || hasIcoMe) {
+        speaker = "自分";
+    }
+    // B. 相手のメッセージ判定
+    else {
+        // 相手のメッセージの場合、名前ヘッダー(dt)があるか、連続投稿(ヘッダーなし)かのどちらか
         
-        if (item.classList.contains('my') || hasIcoMe) {
-            // ここで hasIcoMe が引用内のものを拾っている可能性があるため、
-            // item自体が 'my' クラスを持っているかを重視する。
-            // DOM構造上、自分のメッセージは item.classList.contains('my') ではない場合もある（HTML例では ico_me がある）
-            
-            // 安全策: dtの中に ico_me がある場合のみ自分とする
-            if (item.classList.contains('my') || item.querySelector('dt .ico_me')) {
-                speaker = "自分";
-            } else if (item.querySelector('.ico_me')) {
-                // dt外だがico_meがある場合... 引用内の可能性が高いので無視する
-                // 何もしない（speakerは不明のまま -> lastSpeakerへ）
-            } 
-        } 
-        
-        if (speaker === "不明") {
-             // 連続投稿の場合、直前の話者を使う
-             speaker = this.lastSpeaker;
+        // ヘッダー内の名前を探す
+        // 重要: 引用内(.msg_box)のdtを拾わないよう除外する
+        const dts = item.querySelectorAll('dt');
+        let foundName = false;
+
+        for (const dt of dts) {
+            if (dt.closest('.msg_box')) continue; // 引用内のdtは無視
+
+            const nameEl = dt.querySelector('.name');
+            if (nameEl) {
+                speaker = nameEl.innerText.trim();
+                foundName = true;
+                break;
+            }
+        }
+
+        // ヘッダーが見つからず、かつ speaker も未設定（data-for-copy失敗など）の場合
+        // -> 連続投稿とみなして直前の話者を使用
+        if (!foundName && !speaker) {
+            speaker = this.lastSpeaker;
         }
     }
-    this.lastSpeaker = speaker;
+
+    // 最終的な話者を保存（次の連続投稿のために）
+    // ただし、もし今回の判定が「自分」で、data-for-copyの名前が「本名」だった場合、
+    // ここで保存するのは「自分」にしておくことで一貫性を保つ
+    this.lastSpeaker = speaker || "不明";
 
     // メッセージ本文の取得
     let message = "";
