@@ -128,7 +128,8 @@ class MessageExtractor {
         }
     } else {
         // フォールバック: DOMから探す
-        const nameEl = item.querySelector('.name');
+        // リプライ等の引用内にある名前を拾わないよう、dtタグ直下の名前のみを探す
+        const nameEl = item.querySelector('dt .name');
         if (nameEl) speaker = nameEl.innerText.trim();
         
         const dateEl = item.querySelector('.date'); // 時間表示
@@ -137,9 +138,24 @@ class MessageExtractor {
 
     // もしスピーカーが不明で、クラスに 'my' や 'ico_me' があれば自分
     if (speaker === "不明") {
-        if (item.classList.contains('my') || item.querySelector('.ico_me')) {
-            speaker = "自分";
-        } else {
+        // .ico_me も引用内にある可能性を排除するため、dt内のみ探すか、厳密にチェック
+        const hasIcoMe = item.querySelector('dt .ico_me') !== null || item.querySelector('.ico_me') !== null;
+        
+        if (item.classList.contains('my') || hasIcoMe) {
+            // ここで hasIcoMe が引用内のものを拾っている可能性があるため、
+            // item自体が 'my' クラスを持っているかを重視する。
+            // DOM構造上、自分のメッセージは item.classList.contains('my') ではない場合もある（HTML例では ico_me がある）
+            
+            // 安全策: dtの中に ico_me がある場合のみ自分とする
+            if (item.classList.contains('my') || item.querySelector('dt .ico_me')) {
+                speaker = "自分";
+            } else if (item.querySelector('.ico_me')) {
+                // dt外だがico_meがある場合... 引用内の可能性が高いので無視する
+                // 何もしない（speakerは不明のまま -> lastSpeakerへ）
+            } 
+        } 
+        
+        if (speaker === "不明") {
              // 連続投稿の場合、直前の話者を使う
              speaker = this.lastSpeaker;
         }
