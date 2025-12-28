@@ -27,8 +27,8 @@ LINE WORKS トーク履歴
 ### 1. リポジトリをクローン
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/LINE-WORKS-トーク取得.git
-cd LINE-WORKS-トーク取得
+git clone https://github.com/Vookmarket/line-works-talk-exporter.git
+cd line-works-talk-exporter
 ```
 
 ### 2. Chrome拡張機能として読み込み
