@@ -29,7 +29,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 class MessageExtractor {
   constructor() {
     this.lastSpeaker = "不明";
-    this.lastIsMe = false; // 直前のメッセージが自分だったかどうか
+    this.lastIsMe = false;
+    this.roomTitle = "相手";
   }
 
   /**
@@ -39,7 +40,10 @@ class MessageExtractor {
     const container = this.findMessageContainer();
     if (!container) return [];
 
+    // トークルーム名（相手の名前）を取得
+    this.getRoomTitle();
     console.log("Message container found:", container);
+    console.log("Room title:", this.roomTitle);
 
     const items = container.children;
     if (!items || items.length === 0) return [];
@@ -55,6 +59,25 @@ class MessageExtractor {
     });
 
     return results;
+  }
+
+  getRoomTitle() {
+      // ヘッダーから名前を取得
+      // 提供されたHTML: .section_head .info_box .name
+      const titleSelectors = [
+          '.section_head .info_box .name',
+          '.header .title', 
+          'header .tit',
+          '#header .name'
+      ];
+      
+      for (const sel of titleSelectors) {
+          const el = document.querySelector(sel);
+          if (el) {
+              this.roomTitle = el.innerText.trim();
+              break;
+          }
+      }
   }
 
   /**
@@ -103,7 +126,7 @@ class MessageExtractor {
     let speaker = null;
     let time = "";
     
-    // 時間の取得 (data-for-copyを利用)
+    // 時間の取得 (data-for-copy利用)
     const dataStr = item.getAttribute('data-for-copy');
     if (dataStr) {
         try {
@@ -122,7 +145,6 @@ class MessageExtractor {
     // 話者の特定 (DOMのクラス/表示位置による判定を絶対とする)
     
     // 1. 自分か相手か (表示位置で判定)
-    // msg_rgt: 右側（自分）, msg_lft: 左側（相手）
     const isMe = item.classList.contains('msg_rgt') || item.classList.contains('my');
     
     if (isMe) {
@@ -142,12 +164,12 @@ class MessageExtractor {
             }
         }
         
-        // 名前が見つからない場合 (連続投稿)
+        // 名前が見つからない場合
         if (!speaker) {
-            // 直前が自分だった場合、相手に切り替わった初手で名前がないのは稀だが、
-            // もしそうなったら lastSpeaker("自分") を引き継ぐのは間違いなので "相手" とする
-            if (this.lastIsMe) {
-                speaker = "相手";
+            // 直前が自分だった場合、あるいは初回でlastSpeakerが不明の場合
+            // -> 個人チャットの可能性が高いので「トークルーム名（相手の名前）」を使用
+            if (this.lastIsMe || this.lastSpeaker === "不明") {
+                speaker = this.roomTitle;
             } else {
                 // 相手の連続投稿なら名前を引き継ぐ
                 speaker = this.lastSpeaker;
