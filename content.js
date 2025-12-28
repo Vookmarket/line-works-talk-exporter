@@ -128,9 +128,23 @@ class MessageExtractor {
         }
     } else {
         // フォールバック: DOMから探す
-        // リプライ等の引用内にある名前を拾わないよう、dtタグ直下の名前のみを探す
-        const nameEl = item.querySelector('dt .name');
-        if (nameEl) speaker = nameEl.innerText.trim();
+        // リプライ等の引用内にある名前を拾わないよう、慎重に探索する
+        const nameEls = item.querySelectorAll('.name');
+        for (const el of nameEls) {
+            // .msg_box (メッセージ本文エリア) の中にある名前は引用の可能性が高いため無視
+            // 本来の名前ヘッダーは .msg_box の外（.chat_cont > dt）にある
+            if (el.closest('.msg_box')) continue;
+            
+            // 引用エリアの中にある名前も無視（念のため）
+            if (el.closest('.reply_area') || 
+                el.closest('.quote_area') || 
+                el.closest('.connect') ||
+                el.closest('.forward_msg')) continue;
+
+            // 有効な名前とみなす
+            speaker = el.innerText.trim();
+            break;
+        }
         
         const dateEl = item.querySelector('.date'); // 時間表示
         if (dateEl) time = dateEl.innerText.trim();
