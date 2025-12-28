@@ -46,70 +46,92 @@ class MessageExtractor {
 
   /**
    * メッセージリストのコンテナ要素を探す
-   * 左側のトークルーム一覧ではなく、右側のメッセージエリアを取得する
    */
   findMessageContainer() {
-    // まず、左側のトークルーム一覧を除外するために、メインのメッセージエリアを特定
-    // メッセージエリアの候補（トークルーム一覧は除外）
-    const messageAreaCandidates = [
-      '#messageList',
-      '.message-area',
-      '.chat-content',
-      '.talk-content',
-      'main[class*="chat"]',
-      'main[class*="talk"]',
-      'section[class*="message"]',
-      'div[class*="message-area"]',
-      'div[class*="chat-body"]',
-      'article',
+    // 優先度の高いセレクタ（右側のチャットエリアと思われるもの）
+    const prioritySelectors = [
+      '#messageList', 
+      '#talk_view_area',
+      'ul[class*="chat"]',
+      'div[class*="message_list"]',
+      'ul[class*="message_list"]',
+      '.chat-list',
       '[role="main"]'
     ];
 
-    // メッセージエリアを見つける
-    let messageArea = null;
-    for (const sel of messageAreaCandidates) {
-      const el = document.querySelector(sel);
-      if (el) {
-        // トークルーム一覧を含まないことを確認
-        // （一覧は通常、左側に固定されている）
+    // まずはIDやクラスで探す
+    for (const sel of prioritySelectors) {
+      const els = document.querySelectorAll(sel);
+      for (const el of els) {
+        // 非表示のものは除外
+        if (el.offsetParent === null) continue;
+        
+        // 幅チェック: トークルーム一覧（左サイドバー）は通常幅が狭い
+        // メインエリアはそれより広いはず
         const rect = el.getBoundingClientRect();
-        if (rect.width > 300) { // 一覧より広い要素を優先
-          messageArea = el;
-          break;
+        const windowWidth = window.innerWidth;
+        
+        // ウィンドウの40%以上の幅がある、または400px以上の幅がある要素を対象とする
+        // (サイドバーは通常300px程度)
+        if (rect.width > 400 || rect.width > (windowWidth * 0.4)) {
+           // 要素内にリストアイテムやメッセージっぽいものがあるか確認
+           if (el.querySelectorAll('li, div[class*="msg"], div[class*="row"]').length > 0) {
+             console.log("Found container by selector:", sel, el);
+             return el;
+           }
         }
       }
     }
 
-    if (!messageArea) {
-      // フォールバック: より広範な探索
-      // 画面中央付近（x > 300px）にある要素を探す
-      const allContainers = document.querySelectorAll('div, section, main, article');
-      let bestContainer = null;
-      let maxItems = 0;
+    // セレクタで見つからない場合、ページ内の「メッセージアイテムを多く含む最大のコンテナ」を探す
+    // ただし、幅が狭いコンテナ（サイドバー）は除外する
+    
+    console.log("Fallback: Searching all containers...");
+    const candidates = document.querySelectorAll('ul, ol, div[role="list"], section, main, article, div[class*="list"]');
+    let bestContainer = null;
+    let maxItems = 0;
 
-      allContainers.forEach(container => {
-        const rect = container.getBoundingClientRect();
-        // 左端のトークルーム一覧を除外（x座標が300px以上）
-        if (rect.x > 250 && rect.width > 300) {
-          const itemCount = container.querySelectorAll('li, div[class*="message"], div[class*="msg"]').length;
-          if (itemCount > maxItems) {
-            maxItems = itemCount;
-            bestContainer = container;
-          }
+    candidates.forEach(el => {
+        // 非表示チェック
+        if (el.offsetParent === null) return;
+        
+        // 幅チェック
+        const rect = el.getBoundingClientRect();
+        const windowWidth = window.innerWidth;
+        
+        // サイドバー除外のための幅チェック
+        // ウィンドウ幅の40%以上、または400px以上
+        const isWideEnough = rect.width > 400 || rect.width > (windowWidth * 0.4);
+        
+        if (!isWideEnough) return;
+
+        // アイテム数をカウント
+        const items = el.querySelectorAll('li, div[class*="msg-item"], div[class*="message-item"], div[class*="chat-item"]');
+        if (items.length > maxItems) {
+            maxItems = items.length;
+            bestContainer = el;
         }
-      });
+    });
 
-      messageArea = bestContainer;
+    if (bestContainer) {
+        console.log("Found container by fallback:", bestContainer);
+        return bestContainer;
     }
 
-    return messageArea;
+    // どうしても見つからない場合、bodyを返す（以前の挙動に近いが、フィルター付き）
+    // ただし、これだとサイドバーも拾ってしまう可能性があるので、最後の手段
+    console.warn("No specific container found, returning body.");
+    return document.body;
   }
 
   /**
    * コンテナ内の個々のメッセージ要素を取得する
    */
   findMessageItems(container) {
-    let items = container.querySelectorAll('li, div[role="listitem"], .msg_item, .message-item');
+    // コンテナがbodyの場合、全探索になるので注意が必要
+    // その場合でも、幅が狭い親要素を持つアイテムは除外する
+    
+    let items = container.querySelectorAll('li, div[role="listitem"], .msg_item, .message-item, div[class*="row"]');
     
     // itemsが空の場合、より広範な検索を行う
     if (items.length === 0) {
@@ -119,6 +141,17 @@ class MessageExtractor {
     return Array.from(items).filter(item => {
         // 非表示要素やシステムメッセージを除外
         if (item.style.display === 'none') return false;
+        
+        // アイテム自体の幅チェック（念のため）
+        // 親がbodyの場合、サイドバーのアイテムも含まれる可能性があるため
+        if (container === document.body) {
+            const rect = item.getBoundingClientRect();
+            // 左端にあり、かつ幅が狭いものは除外（サイドバーの可能性大）
+            if (rect.left < 100 && rect.width < 350) {
+                return false;
+            }
+        }
+
         const className = (item.className || "").toString();
         if (className.includes('system') || className.includes('date-line') || className.includes('notice')) {
             return false;
@@ -173,7 +206,7 @@ class MessageExtractor {
   }
 
   identifyTime(item) {
-    const timeSelectors = ['.time', '.date', '.timestamp', 'span[class*="time"]', 'small'];
+    const timeSelectors = ['.time', '.date', '.timestamp', 'span[class*="time"]', 'small', 'div[class*="time"]'];
     for (const sel of timeSelectors) {
       const el = item.querySelector(sel);
       if (el) return el.innerText.trim();
@@ -184,7 +217,7 @@ class MessageExtractor {
   identifyMessageBody(item) {
     const bodySelectors = [
       '.text', '.msg', '.message', '.content', '.speech', '.bubble', 
-      'pre', '.msg_text', '[class*="text"]', 'p'
+      'pre', '.msg_text', '[class*="text"]', 'p', 'div[class*="body"]'
     ];
 
     for (const sel of bodySelectors) {
@@ -192,8 +225,6 @@ class MessageExtractor {
       if (el) return el.innerText.trim();
     }
 
-    // 最終手段: アイテムのテキスト全体から名前と時間を除外して取得を試みる
-    // リスクが高いため、ここではnullを返す（空メッセージとして除外される）
     return null;
   }
 }
@@ -209,11 +240,8 @@ function formatMessages(messages) {
     // 時間がある場合は表示に追加
     const timeStr = m.time ? ` (${m.time})` : "";
     
-    // フォーマット: {話者名} (12:00):
-    //               「{メッセージ}」
-    // 読みやすくするために改行を入れる
     return `${m.speaker}${timeStr}:\n「${m.message}」`;
-  }).join('\n\n'); // 各メッセージ間に空行を入れる
+  }).join('\n\n');
 
   return header + body;
 }
