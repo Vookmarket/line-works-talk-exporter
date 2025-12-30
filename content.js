@@ -14,7 +14,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
 
       const formattedText = formatMessages(messages);
-      sendResponse({ success: true, data: formattedText, count: messages.length });
+      sendResponse({ success: true, data: formattedText, rawData: messages, count: messages.length });
     } catch (error) {
       console.error("Extraction error:", error);
       sendResponse({ success: false, error: error.message });

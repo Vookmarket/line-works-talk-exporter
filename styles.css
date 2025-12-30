@@ -1,5 +1,5 @@
 body {
-  width: 300px;
+  width: 400px;
   padding: 10px;
   font-family: sans-serif;
 }
@@ -34,4 +34,78 @@ p {
   margin: 0;
   font-size: 12px;
   color: #666;
+}
+
+/* 結果リストのスタイル */
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  background-color: #f9f9f9;
+}
+
+.message-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background-color: white;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: #888;
+}
+
+.message-content {
+  font-size: 12px;
+  color: #333;
+  white-space: pre-wrap; /* 改行を維持 */
+  word-break: break-all;
+}
+
+.copy-btn {
+  padding: 4px 8px;
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  font-weight: normal;
+  width: auto;
+  align-self: flex-end;
+}
+
+.copy-btn:hover {
+  background-color: #e0e0e0;
+}
+
+.system-message {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  padding: 4px;
+  background-color: #eee;
+  border-radius: 4px;
+}
+
+.date-header {
+  font-size: 11px;
+  font-weight: bold;
+  color: #555;
+  text-align: center;
+  margin: 8px 0;
+  border-bottom: 1px dashed #ccc;
+  padding-bottom: 2px;
 }
