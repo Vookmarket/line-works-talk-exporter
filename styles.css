@@ -170,3 +170,18 @@ p {
 .copy-date-btn:hover {
   background-color: #e0e0e0;
 }
+
+/* ドラッグ＆ドロップ用スタイル */
+.draggable-item {
+  cursor: grab;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.draggable-item:active {
+  cursor: grabbing;
+}
+
+.draggable-item.over {
+  border-top: 2px solid #00C73C;
+  margin-top: -2px; /* ボーダー分ずれないように */
+}
