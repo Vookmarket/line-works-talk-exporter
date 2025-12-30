@@ -223,7 +223,14 @@ class MessageExtractor {
             els.forEach(el => el.remove());
         });
 
-        message = textEl.innerText.trim();
+        // 改行を確実に反映させるため、<br>を改行文字に置換
+        const html = textEl.innerHTML;
+        // <br>タグを改行に置換
+        const textWithNewlines = html.replace(/<br\s*\/?>/gi, '\n');
+        // 一時的な要素を作成してテキストを取得（HTMLタグを除去）
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = textWithNewlines;
+        message = tempDiv.innerText.trim();
     }
     else if (item.querySelector('.sticker_box')) {
         message = "(スタンプ)";

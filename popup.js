@@ -195,11 +195,22 @@ function renderResults(messages) {
     const container = document.getElementById('result-container');
     container.innerHTML = '';
 
-    messages.forEach(msg => {
+    messages.forEach((msg, index) => {
         if (msg.type === 'date') {
             const el = document.createElement('div');
-            el.className = 'date-header';
-            el.textContent = msg.content;
+            el.className = 'date-header-container';
+            
+            const dateText = document.createElement('span');
+            dateText.className = 'date-header';
+            dateText.textContent = msg.content;
+            
+            const copyBtn = document.createElement('button');
+            copyBtn.textContent = 'この日をコピー';
+            copyBtn.className = 'copy-date-btn';
+            copyBtn.onclick = () => copyDateMessages(index, copyBtn);
+            
+            el.appendChild(dateText);
+            el.appendChild(copyBtn);
             container.appendChild(el);
             return;
         }
@@ -294,4 +305,50 @@ function formatMessagesForDownload(messages) {
   }).join('\n\n');
 
   return header + body;
+}
+
+async function copyDateMessages(startIndex, btnElement) {
+    let textToCopy = "";
+    
+    // ヘッダー情報（日付）を取得
+    const dateMsg = currentMessages[startIndex];
+    textToCopy += `---------------- ${dateMsg.content} ----------------\n\n`;
+    
+    // 次のメッセージから探索開始
+    for (let i = startIndex + 1; i < currentMessages.length; i++) {
+        const msg = currentMessages[i];
+        
+        // 次の日付ヘッダーに来たら終了
+        if (msg.type === 'date') break;
+        
+        if (msg.type === 'system') {
+            textToCopy += `[システム] ${msg.content}\n\n`;
+        } else if (msg.type === 'message') {
+            const timeStr = msg.time ? ` (${msg.time})` : "";
+            textToCopy += `${msg.speaker}${timeStr}:\n「${msg.message}」\n\n`;
+        }
+    }
+    
+    // 末尾の改行を削除
+    textToCopy = textToCopy.trim();
+
+    try {
+        await navigator.clipboard.writeText(textToCopy);
+        
+        // ボタンの表示を一時的に変更
+        const originalText = btnElement.textContent;
+        btnElement.textContent = 'コピー完了!';
+        btnElement.style.backgroundColor = '#dff0d8';
+        btnElement.style.borderColor = '#d6e9c6';
+        
+        setTimeout(() => {
+            btnElement.textContent = originalText;
+            btnElement.style.backgroundColor = '';
+            btnElement.style.borderColor = '';
+        }, 1500);
+    } catch (err) {
+        console.error('コピーに失敗しました', err);
+        btnElement.textContent = 'エラー';
+        btnElement.style.color = 'red';
+    }
 }
