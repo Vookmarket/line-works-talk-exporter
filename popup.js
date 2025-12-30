@@ -1,21 +1,28 @@
+let currentMessages = [];
+
 document.addEventListener('DOMContentLoaded', () => {
     // 起動時にメッセージを取得して表示
     fetchAndDisplayMessages();
 
     // 保存ボタンのイベントリスナー
-    document.getElementById('exportBtn').addEventListener('click', fetchAndDownloadMessages);
+    document.getElementById('exportBtn').addEventListener('click', downloadCurrentMessages);
+
+    // 話者変更ボタンのイベントリスナー
+    document.getElementById('updateSpeakerBtn').addEventListener('click', updateSpeakerName);
 });
 
 /**
- * メッセージを取得して画面に表示する（ダウンロードはしない）
+ * メッセージを取得して画面に表示する
  */
 async function fetchAndDisplayMessages() {
     const statusDiv = document.getElementById('status');
     const resultContainer = document.getElementById('result-container');
+    const editorContainer = document.getElementById('editor-container');
     
     statusDiv.textContent = '読み込み中...';
     statusDiv.style.color = '#666';
     resultContainer.style.display = 'none';
+    editorContainer.style.display = 'none';
     resultContainer.innerHTML = '';
 
     const response = await extractMessages(statusDiv);
@@ -25,9 +32,15 @@ async function fetchAndDisplayMessages() {
             statusDiv.textContent = '警告: メッセージが見つかりませんでした。DOM構造が変更されている可能性があります。';
             statusDiv.style.color = 'orange';
         } else {
+            // データを保持
+            currentMessages = response.rawData;
+
             // 画面表示処理
-            renderResults(response.rawData);
+            renderResults(currentMessages);
+            updateSpeakerList();
+            
             resultContainer.style.display = 'flex';
+            editorContainer.style.display = 'block';
             
             statusDiv.textContent = `完了: ${response.count}件のメッセージを表示しています。`;
             statusDiv.style.color = 'green';
@@ -36,33 +49,89 @@ async function fetchAndDisplayMessages() {
 }
 
 /**
- * メッセージを取得してダウンロードする（画面表示は更新しない、または更新しても良いが主目的はDL）
+ * 現在保持しているメッセージデータをダウンロードする
  */
-async function fetchAndDownloadMessages() {
+function downloadCurrentMessages() {
     const statusDiv = document.getElementById('status');
     
-    // ステータス更新（「取得中...」など表示したいが、リストが表示されている場合は上書きに注意）
-    const originalText = statusDiv.textContent;
-    statusDiv.textContent = '保存用データを取得中...';
+    if (!currentMessages || currentMessages.length === 0) {
+        statusDiv.textContent = 'エラー: 保存するデータがありません。';
+        statusDiv.style.color = 'red';
+        return;
+    }
     
-    const response = await extractMessages(statusDiv);
+    statusDiv.textContent = '保存用データを生成中...';
     
-    if (response && response.success) {
-        if (response.count === 0) {
-            statusDiv.textContent = '警告: メッセージが見つかりませんでした。';
-            statusDiv.style.color = 'orange';
-        } else {
-            // ダウンロード処理
-            downloadFile(response.data, `line_works_talk_${getDateTimeString()}.txt`);
-            
-            statusDiv.textContent = `保存完了: ${response.count}件のメッセージを保存しました。`;
-            statusDiv.style.color = 'green';
-            
-            // 念のためリストも更新しておく（同期ズレ防止）
-            const resultContainer = document.getElementById('result-container');
-            renderResults(response.rawData);
-            resultContainer.style.display = 'flex';
+    // 現在のデータからテキストを生成
+    const formattedText = formatMessagesForDownload(currentMessages);
+    
+    downloadFile(formattedText, `line_works_talk_${getDateTimeString()}.txt`);
+    
+    statusDiv.textContent = `保存完了: ${currentMessages.length}件のメッセージを保存しました。`;
+    statusDiv.style.color = 'green';
+}
+
+/**
+ * 話者名を変更する
+ */
+function updateSpeakerName() {
+    const select = document.getElementById('speakerSelect');
+    const input = document.getElementById('newSpeakerName');
+    const oldName = select.value;
+    const newName = input.value.trim();
+    
+    if (!oldName || !newName) {
+        alert('変更する話者と新しい名前を入力してください。');
+        return;
+    }
+    
+    let count = 0;
+    currentMessages.forEach(msg => {
+        if (msg.speaker === oldName) {
+            msg.speaker = newName;
+            count++;
         }
+    });
+    
+    if (count > 0) {
+        renderResults(currentMessages);
+        updateSpeakerList(); // リストを更新（選択状態はリセットされる）
+        input.value = ''; // 入力をクリア
+        
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = `完了: "${oldName}" を "${newName}" に変更しました (${count}件)。`;
+        statusDiv.style.color = 'green';
+    }
+}
+
+/**
+ * 話者選択リストを更新する
+ */
+function updateSpeakerList() {
+    const select = document.getElementById('speakerSelect');
+    const currentSelection = select.value;
+    
+    // ユニークな話者を抽出
+    const speakers = new Set();
+    currentMessages.forEach(msg => {
+        if (msg.speaker) {
+            speakers.add(msg.speaker);
+        }
+    });
+    
+    select.innerHTML = '';
+    
+    // "自分" を先頭にするなどの配慮があれば良いが、とりあえずアルファベット順または出現順
+    Array.from(speakers).sort().forEach(speaker => {
+        const option = document.createElement('option');
+        option.value = speaker;
+        option.textContent = speaker;
+        select.appendChild(option);
+    });
+    
+    // 可能なら元の選択を維持、なければ先頭
+    if (currentSelection && speakers.has(currentSelection)) {
+        select.value = currentSelection;
     }
 }
 
@@ -75,7 +144,6 @@ async function extractMessages(statusDiv) {
         
         if (!tab.url.includes('worksmobile.com')) {
             statusDiv.textContent = '注意: LINE WORKSのページではない可能性があります。';
-            // 続行はする
         }
 
         try {
@@ -200,4 +268,30 @@ async function copyMessageToClipboard(msg, btnElement) {
         btnElement.textContent = 'エラー';
         btnElement.style.color = 'red';
     }
+}
+
+/**
+ * メッセージリストをテキスト形式に整形する（ダウンロード用）
+ * content.jsのformatMessagesと同様のロジック
+ */
+function formatMessagesForDownload(messages) {
+  const header = `LINE WORKS トーク履歴\n出力日時: ${new Date().toLocaleString()}\n` +
+                 `==================================================\n\n`;
+
+  const body = messages.map(m => {
+    if (m.type === 'date') {
+        return `\n---------------- ${m.content} ----------------`;
+    }
+    if (m.type === 'system') {
+        return `[システム] ${m.content}`;
+    }
+    
+    if (m.type === 'message') {
+        const timeStr = m.time ? ` (${m.time})` : "";
+        return `${m.speaker}${timeStr}:\n「${m.message}」`;
+    }
+    return '';
+  }).join('\n\n');
+
+  return header + body;
 }

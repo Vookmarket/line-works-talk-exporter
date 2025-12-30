@@ -36,6 +36,45 @@ p {
   color: #666;
 }
 
+/* 編集エリアのスタイル */
+#editor-container {
+  background-color: #f0f0f0;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#speakerSelect {
+  flex: 1;
+  padding: 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  max-width: 120px;
+}
+
+#newSpeakerName {
+  flex: 1;
+  padding: 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+#updateSpeakerBtn {
+  padding: 5px 10px;
+  background-color: #666;
+  font-size: 11px;
+}
+
+#updateSpeakerBtn:hover {
+  background-color: #555;
+}
+
 /* 結果リストのスタイル */
 .result-list {
   display: flex;
