@@ -96,6 +96,7 @@ p {
   background-color: white;
   border: 1px solid #eee;
   border-radius: 4px;
+  position: relative; /* 削除ボタンの配置用 */
 }
 
 .item-header {
@@ -104,6 +105,7 @@ p {
   align-items: center;
   font-size: 11px;
   color: #888;
+  padding-right: 20px; /* 削除ボタンのスペース確保 */
 }
 
 .message-content {
@@ -111,6 +113,13 @@ p {
   color: #333;
   white-space: pre-wrap; /* 改行を維持 */
   word-break: break-all;
+}
+
+.action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 4px;
 }
 
 .copy-btn {
@@ -122,15 +131,37 @@ p {
   font-size: 10px;
   cursor: pointer;
   font-weight: normal;
-  width: auto;
-  align-self: flex-end;
 }
 
 .copy-btn:hover {
   background-color: #e0e0e0;
 }
 
+.delete-btn {
+  padding: 4px 8px;
+  background-color: #fff0f0;
+  color: #d9534f;
+  border: 1px solid #f5c6cb;
+  border-radius: 3px;
+  font-size: 10px;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.delete-btn:hover {
+  background-color: #f8d7da;
+}
+
+/* システムメッセージと日付の削除ボタン用コンテナ */
+.item-container {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+}
+
 .system-message {
+  flex: 1;
   font-size: 11px;
   color: #888;
   text-align: center;
@@ -140,6 +171,7 @@ p {
 }
 
 .date-header-container {
+  flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -171,6 +203,18 @@ p {
   background-color: #e0e0e0;
 }
 
+/* 簡易削除ボタン（×） */
+.remove-icon {
+    color: #999;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    font-weight: bold;
+}
+.remove-icon:hover {
+    color: #d9534f;
+}
+
 /* ドラッグ＆ドロップ用スタイル */
 .draggable-item {
   cursor: grab;
@@ -184,4 +228,20 @@ p {
 .draggable-item.over {
   border-top: 2px solid #00C73C;
   margin-top: -2px; /* ボーダー分ずれないように */
+}
+
+/* ドラッグアイテムのラッパー */
+.drag-wrapper {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+.drag-handle {
+    padding: 8px 4px;
+    color: #ccc;
+    cursor: grab;
+    display: flex;
+    align-items: center;
 }

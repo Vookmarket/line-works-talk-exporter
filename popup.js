@@ -196,11 +196,27 @@ function renderResults(messages) {
     container.innerHTML = '';
 
     messages.forEach((msg, index) => {
-        let el;
+        // ラッパー要素（ドラッグ＆ドロップの対象）
+        const wrapper = document.createElement('div');
+        wrapper.className = 'drag-wrapper draggable-item';
+        wrapper.setAttribute('draggable', 'true');
+        wrapper.dataset.index = index;
+        
+        wrapper.addEventListener('dragstart', handleDragStart);
+        wrapper.addEventListener('dragover', handleDragOver);
+        wrapper.addEventListener('dragleave', handleDragLeave);
+        wrapper.addEventListener('drop', handleDrop);
+        wrapper.addEventListener('dragend', handleDragEnd);
+
+        // コンテンツ部分
+        let contentEl;
 
         if (msg.type === 'date') {
-            el = document.createElement('div');
-            el.className = 'date-header-container draggable-item';
+            contentEl = document.createElement('div');
+            contentEl.className = 'item-container';
+            
+            const dateContainer = document.createElement('div');
+            dateContainer.className = 'date-header-container';
             
             const dateText = document.createElement('span');
             dateText.className = 'date-header';
@@ -209,19 +225,27 @@ function renderResults(messages) {
             const copyBtn = document.createElement('button');
             copyBtn.textContent = 'この日をコピー';
             copyBtn.className = 'copy-date-btn';
-            // ドラッグイベントが発火しないようにクリックイベントを制御
             copyBtn.onmousedown = (e) => e.stopPropagation();
             copyBtn.onclick = () => copyDateMessages(index, copyBtn);
             
-            el.appendChild(dateText);
-            el.appendChild(copyBtn);
+            dateContainer.appendChild(dateText);
+            dateContainer.appendChild(copyBtn);
+            contentEl.appendChild(dateContainer);
+            
         } else if (msg.type === 'system') {
-            el = document.createElement('div');
-            el.className = 'system-message draggable-item';
-            el.textContent = msg.content;
+            contentEl = document.createElement('div');
+            contentEl.className = 'item-container';
+            
+            const sysMsg = document.createElement('div');
+            sysMsg.className = 'system-message';
+            sysMsg.textContent = msg.content;
+            
+            contentEl.appendChild(sysMsg);
+            
         } else if (msg.type === 'message') {
-            el = document.createElement('div');
-            el.className = 'message-item draggable-item';
+            contentEl = document.createElement('div');
+            contentEl.className = 'message-item';
+            contentEl.style.width = '100%';
 
             const header = document.createElement('div');
             header.className = 'item-header';
@@ -239,32 +263,63 @@ function renderResults(messages) {
             content.className = 'message-content';
             content.textContent = msg.message;
 
+            const actionButtons = document.createElement('div');
+            actionButtons.className = 'action-buttons';
+
             const copyBtn = document.createElement('button');
             copyBtn.className = 'copy-btn';
             copyBtn.textContent = 'コピー';
-            // ドラッグイベントが発火しないようにクリックイベントを制御
             copyBtn.onmousedown = (e) => e.stopPropagation();
             copyBtn.onclick = () => copyMessageToClipboard(msg, copyBtn);
 
-            el.appendChild(header);
-            el.appendChild(content);
-            el.appendChild(copyBtn);
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.textContent = '削除';
+            deleteBtn.onmousedown = (e) => e.stopPropagation();
+            deleteBtn.onclick = () => deleteMessage(index);
+
+            actionButtons.appendChild(copyBtn);
+            actionButtons.appendChild(deleteBtn);
+
+            contentEl.appendChild(header);
+            contentEl.appendChild(content);
+            contentEl.appendChild(actionButtons);
         }
 
-        if (el) {
-            // ドラッグ＆ドロップ用属性とイベント設定
-            el.setAttribute('draggable', 'true');
-            el.dataset.index = index;
-            
-            el.addEventListener('dragstart', handleDragStart);
-            el.addEventListener('dragover', handleDragOver);
-            el.addEventListener('dragleave', handleDragLeave);
-            el.addEventListener('drop', handleDrop);
-            el.addEventListener('dragend', handleDragEnd);
-
-            container.appendChild(el);
+        // 日付とシステムメッセージ用の削除ボタン（メッセージ以外の場合）
+        if (msg.type !== 'message') {
+            const removeIcon = document.createElement('span');
+            removeIcon.className = 'remove-icon';
+            removeIcon.innerHTML = '&times;';
+            removeIcon.title = '削除';
+            removeIcon.onmousedown = (e) => e.stopPropagation();
+            removeIcon.onclick = () => deleteMessage(index);
+            contentEl.appendChild(removeIcon);
         }
+
+        wrapper.appendChild(contentEl);
+        container.appendChild(wrapper);
     });
+}
+
+/**
+ * メッセージを削除する
+ */
+function deleteMessage(index) {
+    if (confirm('このメッセージを削除しますか？')) {
+        currentMessages.splice(index, 1);
+        renderResults(currentMessages);
+        updateSpeakerList();
+        
+        const statusDiv = document.getElementById('status');
+        statusDiv.textContent = '削除しました。';
+        statusDiv.style.color = '#666';
+        setTimeout(() => {
+            if (statusDiv.textContent === '削除しました。') {
+                statusDiv.textContent = '';
+            }
+        }, 2000);
+    }
 }
 
 // ドラッグ＆ドロップ関連の変数
